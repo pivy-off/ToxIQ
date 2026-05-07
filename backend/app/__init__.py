@@ -1,0 +1,1 @@
+"""PharmaSim FastAPI application package."""

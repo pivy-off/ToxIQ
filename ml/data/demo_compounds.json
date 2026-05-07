@@ -1,0 +1,307 @@
+[
+  {
+    "id": "acetaminophen",
+    "name": "Acetaminophen",
+    "aliases": ["tylenol", "paracetamol", "apap"],
+    "smiles": "CC(=O)Nc1ccc(O)cc1",
+    "default_dose_mg": 500,
+    "toxicity_overrides": {
+      "hepatotoxicity": 38,
+      "herg_risk_score": 12,
+      "ames_mutagenicity_probability": 0.08
+    },
+    "pathway": [
+      {
+        "title": "Oral ingestion",
+        "organ": "Mouth / stomach",
+        "description": "Tablet or liquid enters the GI tract and dissolves for intestinal uptake.",
+        "importance": "Defines oral bioavailability assumptions in the demo PK model."
+      },
+      {
+        "title": "Small-intestine absorption",
+        "organ": "GI tract",
+        "description": "Rapid absorption into portal circulation with moderate first-pass handling.",
+        "importance": "Sets the rate constant feeding the plasma concentration curve."
+      },
+      {
+        "title": "Hepatic conjugation",
+        "organ": "Liver",
+        "description": "Primarily glucuronidation and sulfation to inactive conjugates; high dose shifts toward oxidative pathways.",
+        "importance": "Explains dose-dependent liver risk in screening narratives."
+      },
+      {
+        "title": "Systemic analgesia / antipyretic effect",
+        "organ": "CNS (simplified)",
+        "description": "Central effects reduce fever and pain; exact mechanism is simplified for the hackathon storyline.",
+        "importance": "Connects PK exposure to the therapeutic story without claiming a single validated target."
+      },
+      {
+        "title": "Renal clearance",
+        "organ": "Kidneys",
+        "description": "Conjugates are cleared in urine; renal impairment can prolong exposure in real patients.",
+        "importance": "Links elimination to the falling tail of the simulated curve."
+      },
+      {
+        "title": "Overdose liability",
+        "organ": "Liver",
+        "description": "Supratherapeutic doses increase oxidative metabolite burden — flagged as hepatotoxicity risk in the UI.",
+        "importance": "Motivates the safety score and risk tiles for judges."
+      }
+    ],
+    "organ_notes": {
+      "brain": "Limited classical NSAID-style COX inhibition; central effects dominate the simplified narrative.",
+      "lungs": "Low pulmonary retention in this heuristic map.",
+      "heart": "Low direct cardiac signal in the MVP tox proxy.",
+      "liver": "Primary metabolic hub; dose-dependent stress is the headline liability.",
+      "kidneys": "Conjugate excretion dominates; dehydration and chronic use raise real-world risk (not fully modeled).",
+      "bloodstream": "Peak concentration drives the chart; protein binding is moderate in the heuristic."
+    }
+  },
+  {
+    "id": "ibuprofen",
+    "name": "Ibuprofen",
+    "aliases": ["advil", "motrin"],
+    "smiles": "CC(C)Cc1ccc(cc1)C(C)C(=O)O",
+    "default_dose_mg": 400,
+    "toxicity_overrides": {
+      "hepatotoxicity": 22,
+      "herg_risk_score": 18,
+      "ames_mutagenicity_probability": 0.06
+    },
+    "pathway": [
+      {
+        "title": "Oral ingestion",
+        "organ": "Stomach",
+        "description": "Acidic NSAID can irritate gastric mucosa — GI risk is highlighted in the risk list.",
+        "importance": "Sets up COX-1–related GI warnings in the demo."
+      },
+      {
+        "title": "Rapid absorption",
+        "organ": "Small intestine",
+        "description": "High oral bioavailability with quick rise to peak plasma levels.",
+        "importance": "Shapes the early ascending limb of the PK curve."
+      },
+      {
+        "title": "Plasma protein binding",
+        "organ": "Bloodstream",
+        "description": "Very high binding limits free drug and CNS penetration in most patients.",
+        "importance": "Feeds the protein-binding heuristic and distribution story."
+      },
+      {
+        "title": "COX inhibition",
+        "organ": "Systemic",
+        "description": "Blocks prostaglandin synthesis — anti-inflammatory and analgesic activity.",
+        "importance": "Mechanistic label for the pathway explainer."
+      },
+      {
+        "title": "Hepatic metabolism",
+        "organ": "Liver",
+        "description": "CYP-mediated oxidation and conjugation to polar metabolites.",
+        "importance": "Explains clearance driving elimination from plasma."
+      },
+      {
+        "title": "Renal excretion",
+        "organ": "Kidneys",
+        "description": "Metabolites cleared in urine; dehydration and CKD increase real nephrotoxicity risk.",
+        "importance": "Supports nephrotoxicity monitoring flags in the UI."
+      }
+    ],
+    "organ_notes": {
+      "brain": "Peripheral action dominates due to high protein binding; CNS penetration is limited in the heuristic.",
+      "lungs": "Asthma-sensitive pathways are not modeled in detail — outlier risk is qualitative only.",
+      "heart": "Long-term CV risk is noted qualitatively in screening copy, not predicted quantitatively.",
+      "liver": "Generally lower hepatotoxicity than acetaminophen in overdose narratives; still metabolized here.",
+      "kidneys": "Hemodynamic NSAID effects are the main renal story for the hackathon dashboard.",
+      "bloodstream": "High protein binding reduces free fraction in this toy model."
+    }
+  },
+  {
+    "id": "thalidomide",
+    "name": "Thalidomide",
+    "aliases": [],
+    "smiles": "O=C1NC(=O)C2(N1)c1ccccc1N2C(=O)c1ccccc1",
+    "default_dose_mg": 100,
+    "known_teratogen": true,
+    "toxicity_overrides": {
+      "hepatotoxicity": 35,
+      "herg_risk_score": 28,
+      "ames_mutagenicity_probability": 0.22
+    },
+    "pathway": [
+      {
+        "title": "Oral absorption",
+        "organ": "GI tract",
+        "description": "Slow, variable absorption — exposure can accumulate with repeat dosing in real regimens.",
+        "importance": "Justifies longer half-life and wider distribution in the demo."
+      },
+      {
+        "title": "Systemic distribution",
+        "organ": "Bloodstream",
+        "description": "Substantial tissue partitioning; teratogenic risk is the historical lesson for the UI.",
+        "importance": "Drives a poor safety verdict independent of PK curve shape."
+      },
+      {
+        "title": "Placental crossing (warning)",
+        "organ": "Development",
+        "description": "Known human teratogen — used here as a cautionary education case, not a patient prediction.",
+        "importance": "Explains why trial_ready should read false in the simulator."
+      },
+      {
+        "title": "Cereblon pathway (conceptual)",
+        "organ": "Cells / embryo context",
+        "description": "Modern biology implicates IMiD binding to cereblon in teratogenic and immunomodulatory effects — simplified label.",
+        "importance": "Science communication for judges without over-claiming this MVP."
+      },
+      {
+        "title": "Metabolism",
+        "organ": "Liver / spontaneous hydrolysis",
+        "description": "Multiple routes including spontaneous hydrolysis and enzymatic processing.",
+        "importance": "Supports moderate liver share in the organ map."
+      },
+      {
+        "title": "Elimination",
+        "organ": "Kidneys",
+        "description": "Renal clearance contributes; impaired renal function increases real-world accumulation.",
+        "importance": "Completes ADME storytelling for the pathway card."
+      }
+    ],
+    "organ_notes": {
+      "brain": "Sedation and neuropathy risks are qualitative flags in historical labeling — not simulated as concentrations.",
+      "lungs": "Thromboembolic risk in some regimens is noted in real labels; MVP uses generic risk language only.",
+      "heart": "Thrombotic risk is a known clinical theme — surfaced as elevated cardiovigilance in the risk tiles.",
+      "liver": "Less hepatocentric than acetaminophen overdose stories but still part of clearance.",
+      "kidneys": "Excretion pathway matters for accumulation; heuristic kidney share is moderate.",
+      "bloodstream": "Long half-life increases duration of systemic exposure in the simulated curve."
+    }
+  },
+  {
+    "id": "aspirin",
+    "name": "Aspirin",
+    "aliases": ["acetylsalicylic acid", "asa"],
+    "smiles": "CC(=O)Oc1ccccc1C(=O)O",
+    "default_dose_mg": 300,
+    "toxicity_overrides": {
+      "hepatotoxicity": 20,
+      "herg_risk_score": 15,
+      "ames_mutagenicity_probability": 0.05
+    },
+    "pathway": [
+      {
+        "title": "Oral ingestion",
+        "organ": "Stomach",
+        "description": "Direct gastric irritation possible; enteric coatings reduce but do not eliminate GI risk.",
+        "importance": "Supports GI bleeding warnings in the risk assessment."
+      },
+      {
+        "title": "Rapid hydrolysis to salicylate",
+        "organ": "Blood / tissues",
+        "description": "Ester hydrolysis yields salicylate — the main active moiety at steady exposure.",
+        "importance": "Explains dose-dependent PK complexity (simplified to one compartment in MVP)."
+      },
+      {
+        "title": "Irreversible COX acetylation",
+        "organ": "Platelets / system",
+        "description": "Long-lived platelet effects drive antithrombotic use and bleeding vigilance.",
+        "importance": "Mechanistic hook for cardiovascular / bleeding risk tiles."
+      },
+      {
+        "title": "Hepatic conjugation",
+        "organ": "Liver",
+        "description": "Glycine and glucuronide conjugation; saturable at high doses in reality.",
+        "importance": "Links structure to nonlinear risk at overdose (qualitative only here)."
+      },
+      {
+        "title": "Renal excretion",
+        "organ": "Kidneys",
+        "description": "Salicylate clearance is pH-dependent in physiology — not parameterized in the toy model.",
+        "importance": "Provides renal narrative for the organ explainer."
+      },
+      {
+        "title": "Pediatric caution",
+        "organ": "Systemic",
+        "description": "Reye syndrome risk with viral illness in children — educational warning in real labeling.",
+        "importance": "Optional copy for the team pitch; surfaced as a qualitative risk theme."
+      }
+    ],
+    "organ_notes": {
+      "brain": "Salicylism at high doses (tinnitus) is a classic teaching point — not predicted numerically here.",
+      "lungs": "Aspirin-exacerbated respiratory disease is a known concern for susceptible asthma patients.",
+      "heart": "Antiplatelet benefit at low dose vs bleeding risk at high dose — qualitative trade-off only.",
+      "liver": "Therapeutic doses usually modest liver load; saturation appears at toxicologic exposures.",
+      "kidneys": "Important clearance organ; interacts with GI blood loss risk in real patients.",
+      "bloodstream": "Short effective half-life of parent aspirin vs longer salicylate — heavily simplified in charts."
+    }
+  },
+  {
+    "id": "metformin",
+    "name": "Metformin",
+    "aliases": ["glucophage"],
+    "smiles": "CN(C)C(=N)NC(=N)N",
+    "default_dose_mg": 500,
+    "toxicity_overrides": {
+      "hepatotoxicity": 12,
+      "herg_risk_score": 10,
+      "ames_mutagenicity_probability": 0.04
+    },
+    "pathway": [
+      {
+        "title": "Oral absorption",
+        "organ": "Small intestine",
+        "description": "Incomplete but sufficient absorption; extended-release formulations alter the profile in practice.",
+        "importance": "Moderate bioavailability in the PK heuristic."
+      },
+      {
+        "title": "Portal circulation",
+        "organ": "Liver",
+        "description": "High hepatic exposure without classic CYP metabolism — biguanide pharmacology.",
+        "importance": "Explains liver-centric glucose effects in teaching copy."
+      },
+      {
+        "title": "Mitochondrial / AMPK narrative",
+        "organ": "Hepatocytes",
+        "description": "Simplified mention of reduced hepatic glucose output — not a mechanistic simulation.",
+        "importance": "Connects drug class to the mechanism pathway card."
+      },
+      {
+        "title": "Minimal metabolism",
+        "organ": "Liver",
+        "description": "Excreted largely unchanged — low metabolic liability in the tox heuristics.",
+        "importance": "Supports favorable liver risk tiles for the demo."
+      },
+      {
+        "title": "Renal clearance",
+        "organ": "Kidneys",
+        "description": "Major elimination route; contraindicated in significant renal impairment in real care.",
+        "importance": "Elevates kidney monitoring in the risk list."
+      },
+      {
+        "title": "Lactic acidosis (rare)",
+        "organ": "Systemic",
+        "description": "Rare serious risk with renal or hypoxic stress — flagged qualitatively for education.",
+        "importance": "Balances an otherwise favorable safety band."
+      }
+    ],
+    "organ_notes": {
+      "brain": "Limited CNS penetration; not a hypoglycemic driver as monotherapy in typical teaching models.",
+      "lungs": "Acidosis risk under hypoxia is a teaching footnote — not simulated.",
+      "heart": "Cardioprotective epidemiology is out of scope; no strong cardiac tox proxy in MVP.",
+      "liver": "Pharmacologic target organ for glucose regulation with minimal intrinsic hepatotoxicity in the heuristic.",
+      "kidneys": "Dominant clearance pathway — kidney share is high in the organ map.",
+      "bloodstream": "Moderate distribution volume; renal clearance sets half-life in the toy PK."
+    }
+  },
+  {
+    "id": "candidate_x01",
+    "name": "Candidate X-01",
+    "aliases": ["x-01", "candidate"],
+    "smiles": "CCOc1ccc2nc(S(=O)(=O)N3CCN(C)CC3)sc2c1",
+    "default_dose_mg": 150,
+    "toxicity_overrides": {
+      "hepatotoxicity": 45,
+      "herg_risk_score": 52,
+      "ames_mutagenicity_probability": 0.18
+    },
+    "pathway": [],
+    "organ_notes": {}
+  }
+]

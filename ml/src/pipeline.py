@@ -1,0 +1,289 @@
+"""
+End-to-end orchestration: validate SMILES, features, PK, toxicity, derived metrics, safety.
+
+Produces API-ready dicts: PK curve, toxicity, safety, organ map, pathway, risks, trial copy (UI parity).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Literal
+
+import numpy as np
+
+from ml.src.admet_bridge import (
+    admet_enabled,
+    admet_name_hint,
+    admet_public_block,
+    blend_bioavailability,
+    merge_pk_core_bioavailability,
+    oral_bioavailability_from_admet,
+    run_admet_raw,
+    toxicity_from_admet,
+)
+from ml.src.feature_extraction import extract_features
+from ml.src.pk_predictor import (
+    PKCurveResult,
+    predict_pk_core,
+    pk_summary_public,
+    simulate_oral_pk_curve,
+)
+from ml.src.organ_distribution import (
+    default_organ_note,
+    estimate_organ_distribution,
+    organ_distribution_public,
+)
+from ml.src.name_resolver import infer_name_from_smiles_with_gemini
+from ml.src.prediction_ui import (
+    apply_known_teratogen_adjustment,
+    build_display_flags,
+    build_pk_display,
+    build_risk_assessment,
+    build_trial_recommendation,
+    build_verdict_label,
+    protein_binding_heuristic,
+)
+from ml.src.reaction_pathway import build_reaction_pathway
+from ml.src.safety_score import compute_safety_score, safety_public
+from ml.src.tox_predictor import apply_toxicity_overrides, predict_toxicity_heuristic, toxicity_public
+from ml.utils.constants import (
+    CMAX_CMIN_RATIO_SPIKE_THRESHOLD,
+    DISCLAIMER,
+    TI_HIGH_RISK_MAX,
+    TI_SAFE_MIN,
+)
+from ml.utils.registry import resolve_demo_compound
+from ml.utils.registry import resolve_demo_compound_by_smiles
+from ml.utils.smiles import validate_smiles
+
+
+@dataclass(frozen=True)
+class PredictRequest:
+    drug_name: str
+    smiles: str
+    route: str = "oral"
+    dose_mg: float = 100.0
+    compound_id: str | None = None
+
+
+@dataclass(frozen=True)
+class PredictError:
+    code: Literal["invalid_smiles", "not_found"]
+    message: str
+
+
+def _auc_trapezoid(time_h: list[float], conc: list[float]) -> float:
+    if len(time_h) < 2:
+        return 0.0
+    t = np.asarray(time_h, dtype=float)
+    c = np.asarray(conc, dtype=float)
+    # NumPy 2.0+ removed np.trapz; np.trapezoid is the replacement.
+    if hasattr(np, "trapezoid"):
+        return float(np.trapezoid(c, t))
+    return float(np.trapz(c, t))
+
+
+def _cmax_tmax(curve: PKCurveResult) -> tuple[float, float]:
+    c = np.asarray(curve.concentration_mg_per_l, dtype=float)
+    t = np.asarray(curve.time_hours, dtype=float)
+    if c.size == 0:
+        return 0.0, 0.0
+    i = int(np.argmax(c))
+    return float(c[i]), float(t[i])
+
+
+def _cmin_post_tmax(curve: PKCurveResult) -> float:
+    """Trough-like minimum after peak (single-dose oral demo)."""
+    c = np.asarray(curve.concentration_mg_per_l, dtype=float)
+    t = np.asarray(curve.time_hours, dtype=float)
+    if c.size == 0:
+        return 0.0
+    i_max = int(np.argmax(c))
+    tail = c[i_max:]
+    if tail.size == 0:
+        return float(np.min(c))
+    m = float(np.min(tail))
+    return max(m, 1e-9)
+
+
+def _therapeutic_index_proxy(dose_mg: float, tox_overall_0_100: float) -> float:
+    """
+    MVP TI ≈ TD50 / ED50 (dimensionless proxy for demo charts).
+
+    - ED50 proxy increases mildly with dose (toy “exposure anchor” for the scenario).
+    - TD50 proxy expands when overall toxicity scores are lower (wider toxic margin).
+
+    Not a measured therapeutic index — explainable screening fiction only.
+    """
+    d = max(float(dose_mg), 1.0)
+    ed50 = max(12.0, 0.55 * d)
+    td50 = ed50 * (1.0 + (100.0 - tox_overall_0_100) / 10.0)
+    dose_mod = 0.88 + 0.24 * min(d, 600.0) / 600.0
+    ti = (td50 / ed50) * dose_mod
+    return float(max(0.4, ti))
+
+
+def _ti_class(ti: float) -> str:
+    if ti >= TI_SAFE_MIN:
+        return "safe"
+    if ti < TI_HIGH_RISK_MAX:
+        return "high_risk"
+    return "moderate"
+
+
+def _is_placeholder_name(name: str) -> bool:
+    n = name.strip().lower()
+    return n in {"", "unknown", "custom molecule", "custom_molecule", "molecule"}
+
+
+def run_predict(req: PredictRequest) -> dict[str, Any] | PredictError:
+    demo = resolve_demo_compound(req.compound_id, req.drug_name)
+    smiles = req.smiles.strip()
+    drug_name = req.drug_name.strip() or "Unknown"
+    dose = float(req.dose_mg)
+    route = req.route or "oral"
+
+    if demo and not smiles:
+        smiles = demo.smiles
+    if demo and (not drug_name or drug_name == "Unknown"):
+        drug_name = demo.name
+    if demo and req.dose_mg <= 0:
+        dose = demo.default_dose_mg
+
+    if not smiles:
+        return PredictError("invalid_smiles", "SMILES is required (or pass a known compound_id).")
+
+    val = validate_smiles(smiles)
+    if not val.ok or val.mol is None:
+        return PredictError("invalid_smiles", val.error or "Invalid SMILES.")
+
+    if demo is None:
+        demo = resolve_demo_compound_by_smiles(smiles)
+        if demo is not None and _is_placeholder_name(drug_name):
+            drug_name = demo.name
+
+    mol = val.mol
+    features = extract_features(mol)
+
+    admet_raw, admet_err = (None, None)
+    if admet_enabled():
+        admet_raw, admet_err = run_admet_raw(smiles)
+
+    if _is_placeholder_name(drug_name):
+        gemini_hint = infer_name_from_smiles_with_gemini(smiles)
+        if gemini_hint:
+            drug_name = gemini_hint
+        else:
+            admet_hint = admet_name_hint(admet_raw)
+            if admet_hint:
+                drug_name = admet_hint
+            elif admet_raw is not None and admet_err is None:
+                drug_name = "ADMET-AI Candidate"
+            else:
+                drug_name = "SMILES Candidate"
+
+    pk_core = predict_pk_core(features, route)
+    blended_f: float | None = None
+    if admet_raw is not None and admet_err is None:
+        admet_f = oral_bioavailability_from_admet(admet_raw)
+        if admet_f is not None:
+            blended = blend_bioavailability(pk_core.bioavailability_f, admet_f)
+            blended_f = blended
+            pk_core = merge_pk_core_bioavailability(pk_core, blended)
+
+    curve = simulate_oral_pk_curve(dose, pk_core)
+
+    cmax, tmax = _cmax_tmax(curve)
+    cmin = _cmin_post_tmax(curve)
+    ratio = cmax / max(cmin, 1e-9)
+    auc = _auc_trapezoid(curve.time_hours, curve.concentration_mg_per_l)
+
+    tox_admet = toxicity_from_admet(admet_raw) if admet_raw is not None and admet_err is None else None
+    tox_base = tox_admet if tox_admet is not None else predict_toxicity_heuristic(features)
+    # When ADMET supplies tox endpoints, skip JSON overrides so the model drives the demo.
+    tox_overrides = None if tox_admet is not None else (demo.toxicity_overrides if demo else None)
+    tox = apply_toxicity_overrides(tox_base, tox_overrides)
+
+    ti = _therapeutic_index_proxy(dose, tox.overall_toxicity)
+    ti_class = _ti_class(ti)
+    spike_flag = ratio >= CMAX_CMIN_RATIO_SPIKE_THRESHOLD
+
+    safety = compute_safety_score(
+        tox=tox,
+        therapeutic_index=ti,
+        cmax_cmin_ratio=ratio,
+        bioavailability_f=pk_core.bioavailability_f,
+    )
+    known_teratogen = bool(demo and demo.known_teratogen)
+    if known_teratogen:
+        safety = apply_known_teratogen_adjustment(safety)
+
+    organ_pct = estimate_organ_distribution(features, tox)
+    organ_notes: dict[str, str] = {}
+    if demo and demo.organ_notes:
+        organ_notes.update(demo.organ_notes)
+    for key in organ_pct:
+        organ_notes.setdefault(key, default_organ_note(key, drug_name))
+
+    pk_display = build_pk_display(pk_core)
+    pk_display["protein_binding_percent"] = round(protein_binding_heuristic(features), 1)
+
+    pk_summary = pk_summary_public(pk_core)
+    pk_summary.update(
+        {
+            "cmax": round(cmax, 4),
+            "tmax_hours": round(tmax, 4),
+            "cmin": round(cmin, 6),
+            "auc": round(auc, 4),
+        }
+    )
+
+    derived_metrics = {
+        "half_life_hours": round(pk_core.half_life_hours, 4),
+        "cmax": round(cmax, 4),
+        "cmin": round(cmin, 6),
+        "cmax_cmin_ratio": round(ratio, 4),
+        "therapeutic_index": round(ti, 4),
+        "therapeutic_index_class": ti_class,
+        "cmax_cmin_spike_flag": spike_flag,
+    }
+
+    return {
+        "compound": {
+            "name": drug_name,
+            "smiles": smiles,
+            "route": route,
+            "dose_mg": dose,
+            "compound_id": demo.id if demo else None,
+        },
+        "features": features.to_public_dict(),
+        "verdict": build_verdict_label(safety.score),
+        "pk_summary": pk_summary,
+        "pk_display": pk_display,
+        "pk_curve": {
+            "time_hours": curve.time_hours,
+            "concentration_mg_per_l": curve.concentration_mg_per_l,
+        },
+        "derived_metrics": derived_metrics,
+        "toxicity": toxicity_public(tox),
+        "safety_score": safety_public(safety),
+        "risk_assessment": build_risk_assessment(
+            tox, features, spike_flag, known_teratogen=known_teratogen
+        ),
+        "display_flags": build_display_flags(
+            pk_core, tox, features, known_teratogen=known_teratogen
+        ),
+        "trial_recommendation": build_trial_recommendation(
+            safety, tox, known_teratogen=known_teratogen
+        ),
+        "organ_distribution": organ_distribution_public(organ_pct, organ_notes),
+        "reaction_pathway": build_reaction_pathway(drug_name, demo, features),
+        "admet_ai": admet_public_block(
+            enabled=admet_enabled(),
+            used=admet_raw is not None and admet_err is None,
+            error=admet_err,
+            raw=admet_raw,
+            blended_bioavailability_f=blended_f,
+        ),
+        "disclaimer": DISCLAIMER,
+    }

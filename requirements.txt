@@ -1,0 +1,52 @@
+RevolutionUC Project Requirements
+================================
+
+This repository has two dependency stacks:
+1) Frontend (Next.js / npm)
+2) Backend (FastAPI / Python)
+
+Frontend (npm)
+--------------
+Install:
+  npm install
+
+Core packages:
+- next@16.2.1
+- react@19.2.4
+- react-dom@19.2.4
+- chart.js@^4.5.1
+- react-chartjs-2@^5.3.1
+
+Dev packages:
+- typescript@^5
+- eslint@^9
+- eslint-config-next@16.2.1
+- tailwindcss@^4
+- @tailwindcss/postcss@^4
+- @types/node@^20
+- @types/react@^19
+- @types/react-dom@^19
+
+Backend (Python)
+----------------
+Install:
+  pip install -r backend/requirements.txt
+
+Optional ADMET extras:
+  pip install -r backend/requirements-admet.txt
+
+Primary backend packages are maintained in:
+- backend/requirements.txt
+- backend/requirements-admet.txt
+
+Run
+---
+Frontend:
+  npm run dev
+
+Backend:
+  From project root:
+    uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+
+  From backend directory:
+    uvicorn main:app --reload --host 127.0.0.1 --port 8000

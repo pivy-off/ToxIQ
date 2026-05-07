@@ -1,0 +1,5 @@
+# Official package: https://pypi.org/project/admet-ai/  (Python >=3.11; v2 = Chemprop v2, retrained vs v1 / public web demo)
+# PharmaSim calls ADMETModel.predict(smiles=...) in-process — same PyPI distribution as `pip install admet-ai`.
+# Install: pip install -r backend/requirements.txt -r backend/requirements-admet.txt
+# Optional local Greenstone-style UI: pip install 'admet-ai[web]' && admet_web  → http://127.0.0.1:5000
+admet-ai>=2.0.1
