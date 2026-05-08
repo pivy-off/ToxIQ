@@ -9,7 +9,7 @@ import RiskCard from "@/components/RiskCard";
 import PKChart from "@/components/PKChart";
 import OrganMap from "@/components/OrganMap";
 import PathwayCard from "@/components/PathwayCard";
-import { Drug, drugs, drugNames } from "@/lib/drugData";
+import type { Drug } from "@/lib/drugData";
 import {
   checkBackendHealth,
   CompoundPreset,
@@ -43,7 +43,7 @@ export default function Home() {
   const [selectedPreset, setSelectedPreset] = useState<string | null>("Tylenol");
   const [inputValue, setInputValue] = useState("");
   const [dose, setDose] = useState(1.0);
-  const [drug, setDrug] = useState<Drug>(drugs.Tylenol);
+  const [drug, setDrug] = useState<Drug | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [apiOnline, setApiOnline] = useState(false);
@@ -52,11 +52,12 @@ export default function Home() {
   const [summaryText, setSummaryText] = useState<string | null>(null);
 
   const effectiveScore = useMemo(() => {
+    if (!drug) return 0;
     let score = drug.score;
     if (dose > 2) score = Math.max(5, score - (dose - 2) * 15);
     else if (dose > 1) score = Math.max(10, score - (dose - 1) * 8);
     return Math.round(score);
-  }, [dose, drug.score]);
+  }, [dose, drug]);
 
   useEffect(() => {
     let isMounted = true;
@@ -139,23 +140,10 @@ export default function Home() {
 
       setCurrentPage("results");
       window.scrollTo(0, 0);
-    } catch {
-      const fallbackMatch = drugNames.find(
-        (k) =>
-          k.toLowerCase() === val.toLowerCase() ||
-          drugs[k].name.toLowerCase().includes(val.toLowerCase())
-      );
-
-      if (fallbackMatch) {
-        setDrug(drugs[fallbackMatch]);
-        setSelectedDrugLabel(fallbackMatch);
-        setSelectedPreset(fallbackMatch);
-        setSummaryText(null);
-        setCurrentPage("results");
-        window.scrollTo(0, 0);
-      }
-
-      setErrorMessage("Backend prediction failed. Showing fallback data when available.");
+    } catch (err) {
+      console.error("Prediction failed:", err);
+      setErrorMessage("Backend prediction failed. Please check your connection and try again.");
+      setCurrentPage("input");
     } finally {
       setIsAnalyzing(false);
     }
@@ -257,20 +245,13 @@ export default function Home() {
         {/* ===================== RESULTS PAGE ===================== */}
         {currentPage === "results" && (
           <>
-            <div className="results-header">
-              <p className="results-eyebrow">Safety Analysis</p>
-              <h2 className="results-title">{drug.name}</h2>
-              <p className="results-subtitle">
-                {effectiveScore >= 70
-                  ? "This compound shows a favorable safety profile at standard dosing."
-                  : effectiveScore >= 40
-                  ? "This compound requires additional monitoring due to moderate risk factors."
-                  : "This compound has significant safety concerns that require careful evaluation."}
-              </p>
-            </div>
-
             {isAnalyzing ? (
               <div className="analysis-inline-shell" role="status" aria-live="polite" aria-label="Running analysis">
+                <div className="results-header">
+                  <p className="results-eyebrow">Safety Analysis</p>
+                  <h2 className="results-title">Analyzing...</h2>
+                  <p className="results-subtitle">Running prediction models on the backend.</p>
+                </div>
                 <div className="analysis-inline-card analysis-main-card">
                   <div className="analysis-hero-row">
                     <motion.div
@@ -338,18 +319,31 @@ export default function Home() {
                   ))}
                 </div>
               </div>
-            ) : (
-              <div className="dashboard results-dashboard">
-                <SafetyScoreCard
-                  drug={drug}
-                  dose={dose}
-                  effectiveScore={effectiveScore}
-                  onDoseChange={setDose}
-                  summaryText={null}
-                />
-                <RiskCard drug={drug} />
-              </div>
-            )}
+            ) : drug ? (
+              <>
+                <div className="results-header">
+                  <p className="results-eyebrow">Safety Analysis</p>
+                  <h2 className="results-title">{drug.name}</h2>
+                  <p className="results-subtitle">
+                    {effectiveScore >= 70
+                      ? "This compound shows a favorable safety profile at standard dosing."
+                      : effectiveScore >= 40
+                      ? "This compound requires additional monitoring due to moderate risk factors."
+                      : "This compound has significant safety concerns that require careful evaluation."}
+                  </p>
+                </div>
+                <div className="dashboard results-dashboard">
+                  <SafetyScoreCard
+                    drug={drug}
+                    dose={dose}
+                    effectiveScore={effectiveScore}
+                    onDoseChange={setDose}
+                    summaryText={null}
+                  />
+                  <RiskCard drug={drug} />
+                </div>
+              </>
+            ) : null}
 
             {summaryText && !isAnalyzing && (
               <div className="gemini-summary-wrap">
@@ -388,7 +382,7 @@ export default function Home() {
         )}
 
         {/* ===================== SCIENCE PAGE ===================== */}
-        {currentPage === "science" && (
+        {currentPage === "science" && drug && (
           <>
             <div className="science-page-stack">
               <div className="science-status-card">
