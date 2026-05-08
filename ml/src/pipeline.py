@@ -6,10 +6,13 @@ Produces API-ready dicts: PK curve, toxicity, safety, organ map, pathway, risks,
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Literal
 
 import numpy as np
+
+logger = logging.getLogger("toxiq.pipeline")
 
 from ml.src.admet_bridge import (
     admet_enabled,
@@ -137,6 +140,9 @@ def _is_placeholder_name(name: str) -> bool:
 
 
 def run_predict(req: PredictRequest) -> dict[str, Any] | PredictError:
+    logger.info("Starting prediction: drug_name=%s, smiles=%s..., dose=%.1f, route=%s",
+                req.drug_name, req.smiles[:20] if req.smiles else "none", req.dose_mg, req.route)
+
     demo = resolve_demo_compound(req.compound_id, req.drug_name)
     smiles = req.smiles.strip()
     drug_name = req.drug_name.strip() or "Unknown"
@@ -145,16 +151,19 @@ def run_predict(req: PredictRequest) -> dict[str, Any] | PredictError:
 
     if demo and not smiles:
         smiles = demo.smiles
+        logger.debug("Using demo SMILES for compound_id=%s", req.compound_id)
     if demo and (not drug_name or drug_name == "Unknown"):
         drug_name = demo.name
     if demo and req.dose_mg <= 0:
         dose = demo.default_dose_mg
 
     if not smiles:
+        logger.warning("Prediction failed: no SMILES provided")
         return PredictError("invalid_smiles", "SMILES is required (or pass a known compound_id).")
 
     val = validate_smiles(smiles)
     if not val.ok or val.mol is None:
+        logger.warning("Prediction failed: invalid SMILES - %s", val.error)
         return PredictError("invalid_smiles", val.error or "Invalid SMILES.")
 
     if demo is None:
@@ -163,11 +172,21 @@ def run_predict(req: PredictRequest) -> dict[str, Any] | PredictError:
             drug_name = demo.name
 
     mol = val.mol
-    features = extract_features(mol)
+    logger.debug("SMILES validated successfully")
+
+    try:
+        features = extract_features(mol)
+        logger.debug("Features extracted: MW=%.1f, logP=%.2f", features.mw, features.logp)
+    except Exception as e:
+        logger.exception("Feature extraction failed: %s", str(e))
+        raise
 
     admet_raw, admet_err = (None, None)
     if admet_enabled():
+        logger.debug("Running ADMET-AI predictions")
         admet_raw, admet_err = run_admet_raw(smiles)
+        if admet_err:
+            logger.warning("ADMET-AI error: %s", admet_err)
 
     if _is_placeholder_name(drug_name):
         gemini_hint = infer_name_from_smiles_with_gemini(smiles)
@@ -247,6 +266,9 @@ def run_predict(req: PredictRequest) -> dict[str, Any] | PredictError:
         "therapeutic_index_class": ti_class,
         "cmax_cmin_spike_flag": spike_flag,
     }
+
+    logger.info("Prediction complete: compound=%s, safety_score=%d, verdict=%s",
+                drug_name, safety.score, build_verdict_label(safety.score))
 
     return {
         "compound": {
