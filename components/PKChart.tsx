@@ -44,6 +44,10 @@ export default function PKChart({ drug, dose }: Props) {
       chartRef.current = null;
     }
 
+    const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+    gradient.addColorStop(0, "rgba(0, 113, 227, 0.15)");
+    gradient.addColorStop(1, "rgba(0, 113, 227, 0.01)");
+
     chartRef.current = new Chart(ctx, {
       type: "line",
       data: {
@@ -51,8 +55,8 @@ export default function PKChart({ drug, dose }: Props) {
           {
             label: "Plasma Concentration",
             data: pk.conc.map((c, i) => ({ x: pk.times[i], y: parseFloat(c.toFixed(3)) })),
-            borderColor: "#5a7a4e",
-            backgroundColor: "rgba(90,122,78,0.06)",
+            borderColor: "#0071e3",
+            backgroundColor: gradient,
             borderWidth: 2.5,
             pointRadius: 0,
             tension: 0.4,
@@ -64,7 +68,7 @@ export default function PKChart({ drug, dose }: Props) {
               { x: 0, y: therapeutic },
               { x: 12, y: therapeutic },
             ],
-            borderColor: "rgba(90,122,78,0.4)",
+            borderColor: "rgba(52, 199, 89, 0.5)",
             borderWidth: 1.5,
             borderDash: [6, 4],
             pointRadius: 0,
@@ -76,7 +80,7 @@ export default function PKChart({ drug, dose }: Props) {
               { x: 0, y: toxic },
               { x: 12, y: toxic },
             ],
-            borderColor: "rgba(201,79,63,0.4)",
+            borderColor: "rgba(255, 59, 48, 0.5)",
             borderWidth: 1.5,
             borderDash: [6, 4],
             pointRadius: 0,
@@ -91,9 +95,10 @@ export default function PKChart({ drug, dose }: Props) {
         scales: {
           x: {
             type: "linear",
-            title: { display: true, text: "Time (hours)", color: "#9e9890", font: { size: 11 } },
-            ticks: { color: "#9e9890", font: { size: 11 }, stepSize: 2 },
-            grid: { color: "rgba(0,0,0,0.05)" },
+            title: { display: true, text: "Time (hours)", color: "#86868b", font: { size: 12, weight: 500 } },
+            ticks: { color: "#86868b", font: { size: 11 }, stepSize: 2 },
+            grid: { color: "rgba(0,0,0,0.04)" },
+            border: { display: false },
             min: 0,
             max: 12,
           },
@@ -101,11 +106,12 @@ export default function PKChart({ drug, dose }: Props) {
             title: {
               display: true,
               text: "Concentration (mg/L)",
-              color: "#9e9890",
-              font: { size: 11 },
+              color: "#86868b",
+              font: { size: 12, weight: 500 },
             },
-            ticks: { color: "#9e9890", font: { size: 11 } },
-            grid: { color: "rgba(0,0,0,0.05)" },
+            ticks: { color: "#86868b", font: { size: 11 } },
+            grid: { color: "rgba(0,0,0,0.04)" },
+            border: { display: false },
             min: 0,
           },
         },
@@ -113,17 +119,21 @@ export default function PKChart({ drug, dose }: Props) {
           legend: { display: false },
           tooltip: {
             backgroundColor: "#fff",
-            borderColor: "#e2ddd6",
+            borderColor: "rgba(0,0,0,0.1)",
             borderWidth: 1,
-            titleColor: "#9e9890",
-            bodyColor: "#2e3a28",
+            titleColor: "#86868b",
+            bodyColor: "#1d1d1f",
+            cornerRadius: 8,
+            padding: 12,
+            titleFont: { size: 12, weight: 500 },
+            bodyFont: { size: 14, weight: 600 },
             callbacks: {
               title: (items) => `t = ${items[0].parsed.x}h`,
               label: (item) => ` ${(item.parsed.y ?? 0).toFixed(3)} mg/L`,
             },
           },
         },
-        animation: { duration: 800, easing: "easeInOutQuart" },
+        animation: { duration: 1000, easing: "easeOutQuart" },
       },
     });
 
@@ -149,15 +159,15 @@ export default function PKChart({ drug, dose }: Props) {
       <div className="card-body">
         <div className="chart-legend">
           <div className="legend-item">
-            <div className="legend-dot" style={{ background: "var(--accent)" }} />
+            <div className="legend-dot" style={{ background: "#0071e3" }} />
             Plasma concentration
           </div>
           <div className="legend-item">
-            <div className="legend-dot" style={{ background: "var(--green)", opacity: 0.5 }} />
+            <div className="legend-dot" style={{ background: "#34c759" }} />
             Therapeutic window
           </div>
           <div className="legend-item">
-            <div className="legend-dot" style={{ background: "var(--red)", opacity: 0.5 }} />
+            <div className="legend-dot" style={{ background: "#ff3b30" }} />
             Toxic threshold
           </div>
         </div>

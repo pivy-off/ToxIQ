@@ -20,7 +20,7 @@ export default function SafetyScoreCard({
   const circumference = 251;
   const offset = circumference - (effectiveScore / 100) * circumference;
   const color =
-    effectiveScore >= 70 ? "var(--green)" : effectiveScore >= 40 ? "var(--amber)" : "var(--red)";
+    effectiveScore >= 70 ? "#34c759" : effectiveScore >= 40 ? "#ff9500" : "#ff3b30";
 
   const doseLabel = `${dose.toFixed(1)}\u00D7`;
   const isToxicDose = dose > 5;
@@ -31,9 +31,9 @@ export default function SafetyScoreCard({
     effectiveScore >= 40 ? "ACCEPTABLE" : "HIGH RISK";
 
   const verdictColor =
-    isToxicDose          ? "var(--red)"   :
-    effectiveScore >= 70 ? "var(--green)" :
-    effectiveScore >= 40 ? "var(--amber)" : "var(--red)";
+    isToxicDose          ? "#ff3b30" :
+    effectiveScore >= 70 ? "#34c759" :
+    effectiveScore >= 40 ? "#ff9500" : "#ff3b30";
 
   const badgeTxt =
     isToxicDose          ? "Toxic"        :

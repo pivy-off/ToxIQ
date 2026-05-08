@@ -3,9 +3,9 @@
 import { Drug } from "@/lib/drugData";
 
 const barColors: Record<string, string> = {
-  safe: "#5a7a4e",
-  warn: "#d4a84b",
-  danger: "#c94f3f",
+  safe: "#34c759",
+  warn: "#ff9500",
+  danger: "#ff3b30",
 };
 
 interface Props {

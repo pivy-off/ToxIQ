@@ -13,7 +13,7 @@ export default function Navbar({ currentPage, onPageChange, hasResults }: Props)
     <nav>
       <div className="nav-logo" onClick={() => onPageChange("input")} style={{ cursor: "pointer" }}>
         <div className="nav-logo-dot" />
-        PharmaSim
+        ToxIQ
       </div>
       <ul className="nav-links">
         <li>
