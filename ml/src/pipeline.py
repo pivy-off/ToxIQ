@@ -176,7 +176,7 @@ def run_predict(req: PredictRequest) -> dict[str, Any] | PredictError:
 
     try:
         features = extract_features(mol)
-        logger.debug("Features extracted: MW=%.1f, logP=%.2f", features.mw, features.logp)
+        logger.debug("Features extracted: MW=%.1f, logP=%.2f", features.molecular_weight, features.logp)
     except Exception as e:
         logger.exception("Feature extraction failed: %s", str(e))
         raise
