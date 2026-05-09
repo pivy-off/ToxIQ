@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from backend.main import sanitize_drug_name, sanitize_smiles
+from backend.utils.sanitize import sanitize_drug_name, sanitize_smiles
 from ml.src.pipeline import PredictError, PredictRequest, run_predict
 from backend.models.schemas import CompareRequestBody, PredictRequestBody
 

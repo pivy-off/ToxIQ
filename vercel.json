@@ -6,9 +6,6 @@
   "devCommand": "npm run dev",
   "outputDirectory": ".next",
   "regions": ["iad1"],
-  "env": {
-    "BACKEND_URL": "@backend_url"
-  },
   "headers": [
     {
       "source": "/(.*)",

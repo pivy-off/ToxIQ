@@ -5,67 +5,35 @@ Single canonical entrypoint for all API routes.
 
 from __future__ import annotations
 
-import html
 import logging
 import os
-import re
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+load_dotenv()
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from backend.utils.sanitize import sanitize_drug_name, sanitize_smiles
 from backend.routes.compare import router as compare_router
 from backend.routes.compounds import router as compounds_router
 from backend.routes.predict import router as predict_router
 from backend.routes.simulate import router as simulate_router
 from backend.routes.summary import router as summary_router
 
-load_dotenv()
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger("toxiq")
-
-
-def sanitize_drug_name(name: str) -> str:
-    """
-    Sanitize drug name input to prevent prompt injection and XSS.
-    - Strip HTML tags
-    - Remove dangerous characters
-    - Limit length
-    - Escape HTML entities
-    """
-    if not name:
-        return ""
-
-    name = re.sub(r"<[^>]*>", "", name)
-    name = re.sub(r"[<>\"'`;\\{}]", "", name)
-    name = name.strip()[:200]
-    name = html.escape(name)
-    return name
-
-
-def sanitize_smiles(smiles: str) -> str:
-    """
-    Sanitize SMILES string - allow only valid SMILES characters.
-    """
-    if not smiles:
-        return ""
-
-    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@+\\-=#()[]/%.")
-    smiles = "".join(c for c in smiles if c in allowed)
-    return smiles.strip()[:500]
 
 
 @asynccontextmanager
