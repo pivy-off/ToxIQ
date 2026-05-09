@@ -110,18 +110,32 @@ async def sanitize_inputs_middleware(request: Request, call_next):
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     logger.warning("HTTP %d on %s: %s", exc.status_code, request.url.path, exc.detail)
+    origin = request.headers.get("origin", "")
+    allowed = get_allowed_origins()
+    headers = {}
+    if origin in allowed:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": str(exc.detail)},
+        headers=headers,
     )
 
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled exception on %s: %s", request.url.path, str(exc))
+    origin = request.headers.get("origin", "")
+    allowed = get_allowed_origins()
+    headers = {}
+    if origin in allowed:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
     return JSONResponse(
         status_code=500,
-        content={"detail": "An unexpected error occurred. Please try again."},
+        content={"detail": str(exc)},
+        headers=headers,
     )
 
 
