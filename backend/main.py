@@ -65,10 +65,12 @@ app = FastAPI(
 
 def get_allowed_origins() -> list[str]:
     """Get CORS allowed origins from environment."""
-    origins = []
+    origins = [
+        "https://toxiq-app.vercel.app",
+    ]
 
     frontend_url = os.getenv("FRONTEND_URL", "").strip()
-    if frontend_url:
+    if frontend_url and frontend_url not in origins:
         origins.append(frontend_url)
 
     if os.getenv("TOXIQ_DEV_MODE", "").lower() in ("true", "1"):
@@ -76,10 +78,6 @@ def get_allowed_origins() -> list[str]:
             "http://localhost:3000",
             "http://127.0.0.1:3000",
         ])
-
-    if not origins:
-        logger.warning("No FRONTEND_URL configured. CORS will reject all cross-origin requests.")
-        origins = ["http://localhost:3000"]
 
     return origins
 
