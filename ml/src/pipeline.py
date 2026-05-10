@@ -231,7 +231,7 @@ def run_predict(req: PredictRequest) -> dict[str, Any] | PredictError:
             blended_f = blended
             pk_core = merge_pk_core_bioavailability(pk_core, blended)
     logger.info("[STEP 6/10] PK core complete: t1/2=%.1fh, F=%.2f, Vd=%.1f",
-                pk_core.half_life_hours, pk_core.bioavailability_f, pk_core.volume_of_distribution)
+                pk_core.half_life_hours, pk_core.bioavailability_f, pk_core.volume_distribution_l)
 
     logger.info("[STEP 7/10] Simulating PK curve...")
     curve = simulate_oral_pk_curve(dose, pk_core)
