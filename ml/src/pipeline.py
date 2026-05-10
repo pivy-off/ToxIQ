@@ -140,67 +140,88 @@ def _is_placeholder_name(name: str) -> bool:
 
 
 def run_predict(req: PredictRequest) -> dict[str, Any] | PredictError:
-    logger.info("Starting prediction: drug_name=%s, smiles=%s..., dose=%.1f, route=%s",
+    logger.info("=== PIPELINE START: drug_name=%s, smiles=%s..., dose=%.1f, route=%s ===",
                 req.drug_name, req.smiles[:20] if req.smiles else "none", req.dose_mg, req.route)
 
+    logger.info("[STEP 1/10] Resolving demo compound...")
     demo = resolve_demo_compound(req.compound_id, req.drug_name)
     smiles = req.smiles.strip()
     drug_name = req.drug_name.strip() or "Unknown"
     dose = float(req.dose_mg)
     route = req.route or "oral"
+    logger.info("[STEP 1/10] Demo compound resolved: %s", demo.name if demo else "None")
 
     if demo and not smiles:
         smiles = demo.smiles
-        logger.debug("Using demo SMILES for compound_id=%s", req.compound_id)
+        logger.info("[STEP 1/10] Using demo SMILES for compound_id=%s", req.compound_id)
     if demo and (not drug_name or drug_name == "Unknown"):
         drug_name = demo.name
     if demo and req.dose_mg <= 0:
         dose = demo.default_dose_mg
 
     if not smiles:
-        logger.warning("Prediction failed: no SMILES provided")
+        logger.warning("[STEP 1/10] FAILED: no SMILES provided")
         return PredictError("invalid_smiles", "SMILES is required (or pass a known compound_id).")
 
+    logger.info("[STEP 2/10] Validating SMILES...")
     val = validate_smiles(smiles)
     if not val.ok or val.mol is None:
-        logger.warning("Prediction failed: invalid SMILES - %s", val.error)
+        logger.warning("[STEP 2/10] FAILED: invalid SMILES - %s", val.error)
         return PredictError("invalid_smiles", val.error or "Invalid SMILES.")
+    logger.info("[STEP 2/10] SMILES validated successfully")
 
     if demo is None:
+        logger.info("[STEP 2/10] No demo found, checking SMILES registry...")
         demo = resolve_demo_compound_by_smiles(smiles)
         if demo is not None and _is_placeholder_name(drug_name):
             drug_name = demo.name
+            logger.info("[STEP 2/10] Found demo by SMILES: %s", demo.name)
 
     mol = val.mol
-    logger.debug("SMILES validated successfully")
 
+    logger.info("[STEP 3/10] Extracting molecular features...")
     try:
         features = extract_features(mol)
-        logger.debug("Features extracted: MW=%.1f, logP=%.2f", features.molecular_weight, features.logp)
+        logger.info("[STEP 3/10] Features extracted: MW=%.1f, logP=%.2f, TPSA=%.1f",
+                    features.molecular_weight, features.logp, features.tpsa)
     except Exception as e:
-        logger.exception("Feature extraction failed: %s", str(e))
+        logger.exception("[STEP 3/10] FAILED: Feature extraction error: %s", str(e))
         raise
 
+    logger.info("[STEP 4/10] Checking ADMET-AI status (enabled=%s)...", admet_enabled())
     admet_raw, admet_err = (None, None)
     if admet_enabled():
-        logger.debug("Running ADMET-AI predictions")
+        logger.info("[STEP 4/10] Running ADMET-AI predictions...")
         admet_raw, admet_err = run_admet_raw(smiles)
         if admet_err:
-            logger.warning("ADMET-AI error: %s", admet_err)
+            logger.warning("[STEP 4/10] ADMET-AI error: %s", admet_err)
+        else:
+            logger.info("[STEP 4/10] ADMET-AI predictions complete")
+    else:
+        logger.info("[STEP 4/10] ADMET-AI disabled, skipping")
 
+    logger.info("[STEP 5/10] Resolving drug name (current: %s, is_placeholder=%s)...",
+                drug_name, _is_placeholder_name(drug_name))
     if _is_placeholder_name(drug_name):
+        logger.info("[STEP 5/10] Placeholder name detected, trying Gemini inference...")
         gemini_hint = infer_name_from_smiles_with_gemini(smiles)
+        logger.info("[STEP 5/10] Gemini returned: %s", gemini_hint)
         if gemini_hint:
             drug_name = gemini_hint
         else:
             admet_hint = admet_name_hint(admet_raw)
             if admet_hint:
                 drug_name = admet_hint
+                logger.info("[STEP 5/10] Using ADMET hint: %s", drug_name)
             elif admet_raw is not None and admet_err is None:
                 drug_name = "ADMET-AI Candidate"
             else:
                 drug_name = "SMILES Candidate"
+        logger.info("[STEP 5/10] Final drug name: %s", drug_name)
+    else:
+        logger.info("[STEP 5/10] Using provided drug name: %s", drug_name)
 
+    logger.info("[STEP 6/10] Computing PK core parameters...")
     pk_core = predict_pk_core(features, route)
     blended_f: float | None = None
     if admet_raw is not None and admet_err is None:
@@ -209,24 +230,30 @@ def run_predict(req: PredictRequest) -> dict[str, Any] | PredictError:
             blended = blend_bioavailability(pk_core.bioavailability_f, admet_f)
             blended_f = blended
             pk_core = merge_pk_core_bioavailability(pk_core, blended)
+    logger.info("[STEP 6/10] PK core complete: t1/2=%.1fh, F=%.2f, Vd=%.1f",
+                pk_core.half_life_hours, pk_core.bioavailability_f, pk_core.volume_of_distribution)
 
+    logger.info("[STEP 7/10] Simulating PK curve...")
     curve = simulate_oral_pk_curve(dose, pk_core)
-
     cmax, tmax = _cmax_tmax(curve)
     cmin = _cmin_post_tmax(curve)
     ratio = cmax / max(cmin, 1e-9)
     auc = _auc_trapezoid(curve.time_hours, curve.concentration_mg_per_l)
+    logger.info("[STEP 7/10] PK curve complete: Cmax=%.3f, Tmax=%.1fh, AUC=%.2f", cmax, tmax, auc)
 
+    logger.info("[STEP 8/10] Computing toxicity predictions...")
     tox_admet = toxicity_from_admet(admet_raw) if admet_raw is not None and admet_err is None else None
     tox_base = tox_admet if tox_admet is not None else predict_toxicity_heuristic(features)
-    # When ADMET supplies tox endpoints, skip JSON overrides so the model drives the demo.
     tox_overrides = None if tox_admet is not None else (demo.toxicity_overrides if demo else None)
     tox = apply_toxicity_overrides(tox_base, tox_overrides)
+    logger.info("[STEP 8/10] Toxicity complete: overall=%.1f, hepato=%.1f, cardio=%.1f",
+                tox.overall_toxicity, tox.hepatotoxicity, tox.cardiotoxicity)
 
     ti = _therapeutic_index_proxy(dose, tox.overall_toxicity)
     ti_class = _ti_class(ti)
     spike_flag = ratio >= CMAX_CMIN_RATIO_SPIKE_THRESHOLD
 
+    logger.info("[STEP 9/10] Computing safety score...")
     safety = compute_safety_score(
         tox=tox,
         therapeutic_index=ti,
@@ -236,7 +263,9 @@ def run_predict(req: PredictRequest) -> dict[str, Any] | PredictError:
     known_teratogen = bool(demo and demo.known_teratogen)
     if known_teratogen:
         safety = apply_known_teratogen_adjustment(safety)
+    logger.info("[STEP 9/10] Safety score: %d (TI=%.2f, class=%s)", safety.score, ti, ti_class)
 
+    logger.info("[STEP 10/10] Computing organ distribution and building response...")
     organ_pct = estimate_organ_distribution(features, tox)
     organ_notes: dict[str, str] = {}
     if demo and demo.organ_notes:
@@ -267,7 +296,8 @@ def run_predict(req: PredictRequest) -> dict[str, Any] | PredictError:
         "cmax_cmin_spike_flag": spike_flag,
     }
 
-    logger.info("Prediction complete: compound=%s, safety_score=%d, verdict=%s",
+    logger.info("[STEP 10/10] Building final response...")
+    logger.info("=== PIPELINE COMPLETE: compound=%s, safety_score=%d, verdict=%s ===",
                 drug_name, safety.score, build_verdict_label(safety.score))
 
     return {

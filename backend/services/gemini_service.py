@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import os
 from typing import Dict
 
 logger = logging.getLogger("toxiq.gemini")
+
+GEMINI_TIMEOUT_SECONDS = 30
 
 
 def _gemini_model_candidates() -> list[str]:
@@ -87,20 +90,36 @@ def get_pharmaceutical_summary(
             f"PK parameters: {pk_params}. Toxicity profile: {toxicity}."
         )
 
-        for model_name in _gemini_model_candidates():
+        def _call_model(model_name: str) -> str | None:
             try:
-                logger.debug("Trying Gemini model: %s", model_name)
                 model = genai.GenerativeModel(model_name)
                 response = model.generate_content(prompt)
                 text = getattr(response, "text", None)
                 if text and text.strip():
-                    logger.info("Generated summary for %s using %s", drug_name, model_name)
                     return text.strip()
+                return None
+            except Exception as e:
+                logger.debug("Gemini model %s inner error: %s", model_name, str(e))
+                return None
+
+        for model_name in _gemini_model_candidates():
+            logger.debug("Trying Gemini model: %s", model_name)
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_call_model, model_name)
+                    try:
+                        result = future.result(timeout=GEMINI_TIMEOUT_SECONDS)
+                        if result:
+                            logger.info("Generated summary for %s using %s", drug_name, model_name)
+                            return result
+                    except concurrent.futures.TimeoutError:
+                        logger.warning("Gemini model %s timed out after %ds", model_name, GEMINI_TIMEOUT_SECONDS)
+                        continue
             except Exception as e:
                 logger.warning("Gemini model %s failed: %s", model_name, str(e))
                 continue
 
-        logger.warning("All Gemini models failed for %s, using fallback", drug_name)
+        logger.warning("All Gemini models failed or timed out for %s, using fallback", drug_name)
         return _fallback_summary(drug_name, pk_params, toxicity)
 
     except ImportError:
