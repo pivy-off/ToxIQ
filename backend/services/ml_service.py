@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import logging
 from typing import Dict, Tuple
 
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
+
+logger = logging.getLogger("toxiq.ml_service")
 
 try:
     from rdkit import Chem
     from rdkit.Chem import Descriptors, Lipinski
 
     HAS_RDKIT = True
-except Exception:
+except ImportError:
+    logger.info("RDKit not available - SMILES-based predictions disabled")
     Chem = None
     Descriptors = None
     Lipinski = None
@@ -20,7 +24,8 @@ try:
     from xgboost import XGBRegressor
 
     HAS_XGBOOST = True
-except Exception:
+except ImportError:
+    logger.info("XGBoost not available - using RandomForest fallback")
     HAS_XGBOOST = False
 
 from backend.models.schemas import DrugInput, PredictResponse

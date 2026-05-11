@@ -1,18 +1,19 @@
-fastapi
-uvicorn
-pydantic
-python-dotenv
-scikit-learn
-xgboost
-rdkit-pypi; python_version < "3.13"
-scipy
-pandas
-numpy
-google-generativeai
 # PharmaSim API + ML stack (hackathon MVP)
 # Use Python 3.10–3.12 for pip wheels (RDKit may not publish wheels for very new Python).
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 pydantic>=2.9.0
+python-dotenv>=1.0.0
 numpy>=1.26.0
+scipy>=1.11.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+xgboost>=2.0.0
 rdkit>=2023.9.1
+google-generativeai>=0.8.0
+slowapi>=0.1.9
+
+# Development/testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+httpx>=0.27.0

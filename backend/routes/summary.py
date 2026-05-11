@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from backend.utils.sanitize import sanitize_drug_name, sanitize_smiles
 from ml.src.pipeline import PredictError, PredictRequest, run_predict
@@ -12,10 +14,12 @@ from backend.services.gemini_service import get_pharmaceutical_summary
 logger = logging.getLogger("toxiq.summary")
 
 router = APIRouter(prefix="/summary", tags=["summary"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/", response_model=SummaryResponse)
-def summarize_drug(payload: SummaryInput) -> SummaryResponse:
+@limiter.limit("20/minute")
+def summarize_drug(request: Request, payload: SummaryInput) -> SummaryResponse:
     """Generate a plain-language summary of drug safety profile."""
     drug_name = sanitize_drug_name(payload.drug_name)
     smiles = sanitize_smiles(payload.smiles)

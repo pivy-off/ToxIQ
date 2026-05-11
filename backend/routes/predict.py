@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from backend.utils.sanitize import sanitize_drug_name, sanitize_smiles
 from ml.src.pipeline import PredictError, PredictRequest, run_predict
@@ -11,10 +13,12 @@ from backend.models.schemas import PredictRequestBody
 logger = logging.getLogger("toxiq.predict")
 
 router = APIRouter(prefix="/predict", tags=["predict"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/")
-def predict(payload: PredictRequestBody) -> dict[str, object]:
+@limiter.limit("30/minute")
+def predict(request: Request, payload: PredictRequestBody) -> dict[str, object]:
     """
     Full ML pipeline: RDKit features, PK core + oral curve, toxicity heuristics, safety score,
     organ map, pathway — JSON for the dashboard.

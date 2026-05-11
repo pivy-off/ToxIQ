@@ -15,8 +15,13 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 load_dotenv()
+
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
@@ -61,6 +66,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 def get_allowed_origins() -> list[str]:
@@ -134,7 +142,7 @@ async def general_exception_handler(request: Request, exc: Exception):
         headers["Access-Control-Allow-Credentials"] = "true"
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc)},
+        content={"detail": "An internal error occurred. Please try again later."},
         headers=headers,
     )
 
