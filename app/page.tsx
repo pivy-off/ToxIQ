@@ -69,9 +69,12 @@ export default function Home() {
     };
 
     try {
-      const prediction = await fetchPrediction(requestPayload);
+      // Run prediction and summary in parallel for faster loading
+      const [prediction, summary] = await Promise.all([
+        fetchPrediction(requestPayload),
+        fetchSummary(requestPayload),
+      ]);
       const mappedDrug = mapPredictionToDrug(prediction);
-      const summary = await fetchSummary(requestPayload);
 
       dispatch({
         type: "ANALYSIS_SUCCESS",
