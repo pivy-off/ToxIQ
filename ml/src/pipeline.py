@@ -246,8 +246,8 @@ def run_predict(req: PredictRequest) -> dict[str, Any] | PredictError:
     tox_base = tox_admet if tox_admet is not None else predict_toxicity_heuristic(features)
     tox_overrides = None if tox_admet is not None else (demo.toxicity_overrides if demo else None)
     tox = apply_toxicity_overrides(tox_base, tox_overrides)
-    logger.info("[STEP 8/10] Toxicity complete: overall=%.1f, hepato=%.1f, cardio=%.1f",
-                tox.overall_toxicity, tox.hepatotoxicity, tox.cardiotoxicity)
+    logger.info("[STEP 8/10] Toxicity complete: overall=%.1f, hepato=%.1f, hERG=%.1f",
+                tox.overall_toxicity, tox.hepatotoxicity, tox.herg_risk_score)
 
     ti = _therapeutic_index_proxy(dose, tox.overall_toxicity)
     ti_class = _ti_class(ti)
